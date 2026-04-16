@@ -198,7 +198,7 @@ export default function App() {
           {/* THE BENCH */}
           {isManagerView && (
             <div style={{ width: '250px', border: '2px dashed #ccc', padding: '15px', borderRadius: '8px', backgroundColor: '#fdfdfd' }}>
-              <h2 style={{ marginTop: 0 }}>The Bench</h2>
+              <h2 style={{ marginTop: 0 }}>Personnel</h2>
               {initialWorkers.map(worker => (
                 <DraggableWorker key={worker.id} worker={worker} usedLives={getUsedLives(worker.id)} />
               ))}
