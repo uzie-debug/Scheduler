@@ -5,9 +5,9 @@ import { DndContext, DragOverlay, useDraggable, useDroppable } from '@dnd-kit/co
 // THE TOYBOX (Initial Data)
 // ==========================================
 const initialWorkers = [
-  { id: 'w-1', name: 'Alice', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-2', name: 'Bob', maxLives: 3, type: 'Part-Time' },
-  { id: 'w-3', name: 'Charlie', maxLives: 4, type: 'Full-Time' }
+  { id: 'w-1', name: 'Gary', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-2', name: 'Jaime', maxLives: 3, type: 'Part-Time' },
+  { id: 'w-3', name: 'Angelique', maxLives: 4, type: 'Full-Time' }
 ];
 
 const initialSchedule = {
