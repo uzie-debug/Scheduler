@@ -8,9 +8,17 @@ import {
 // 1. THE TOYBOX (Initial Data)
 // ==========================================
 const initialWorkers = [
-  { id: 'w-1', name: 'Alice', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-2', name: 'Bob', maxLives: 3, type: 'Part-Time' },
-  { id: 'w-3', name: 'Charlie', maxLives: 4, type: 'Full-Time' }
+  { id: 'w-1', name: 'Gary', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-2', name: 'Jaime', maxLives: 3, type: 'Part-Time' },
+  { id: 'w-3', name: 'Angelique', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-4', name: 'Kadie', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-5', name: 'Kaylee', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-6', name: 'Isaiah', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-7', name: 'Lucas', maxLives: 3, type: 'Part-Time' },
+  { id: 'w-8', name: 'Erica', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-9', name: 'Ursa', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-10', name: 'Jasmin', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-11', name: 'Markus', maxLives: 4, type: 'Full-Time' },
 ];
 
 const initialSchedule = {
