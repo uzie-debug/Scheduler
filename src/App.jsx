@@ -272,7 +272,15 @@ export default function App() {
 
             {/* THE CALENDAR */}
             {/* Horizontal scroll wrapper for mobile to prevent squishing */}
-            <div style={{ flex: 1, overflowX: 'auto', paddingBottom: '10px' }}>
+            {/* Horizontal scroll wrapper for mobile to prevent squishing */}
+<div style={{ 
+  flex: 1, 
+  minWidth: 0, /* <--- THIS IS THE MAGIC FIX */
+  overflowX: 'auto', 
+  paddingBottom: '10px',
+  WebkitOverflowScrolling: 'touch' /* Smooth scrolling on iOS */
+}}>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px', minWidth: '900px' }}>
                 {Object.keys(schedule).map(day => (
                   <div key={day} style={{ border: `1px solid ${isDarkMode ? '#444' : '#ccc'}`, borderRadius: '8px', overflow: 'hidden', backgroundColor: isDarkMode ? '#1a1a1a' : '#fafafa' }}>
