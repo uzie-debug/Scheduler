@@ -8,18 +8,9 @@ import {
 // 1. THE TOYBOX (Initial Data)
 // ==========================================
 const initialWorkers = [
-  { id: 'w-1', name: 'Gary', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-2', name: 'Jaime', maxLives: 3, type: 'Part-Time' },
-  { id: 'w-3', name: 'Angelique', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-4', name: 'Kadie', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-5', name: 'Kaylee', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-6', name: 'Isaiah', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-7', name: 'Lucas', maxLives: 3, type: 'Part-Time' },
-  { id: 'w-8', name: 'Erica', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-9', name: 'Ursa', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-10', name: 'Jasmin', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-11', name: 'Markus', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-12', name: 'Jesus', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-1', name: 'Alice', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-2', name: 'Bob', maxLives: 3, type: 'Part-Time' },
+  { id: 'w-3', name: 'Charlie', maxLives: 4, type: 'Full-Time' }
 ];
 
 const initialSchedule = {
@@ -31,6 +22,14 @@ const initialSchedule = {
   saturday: { am: [], pm: [] },
   sunday: { am: [], pm: [] }
 };
+
+const TIME_OPTIONS = [
+  "6:00 AM", "6:30 AM", "7:00 AM", "7:30 AM", "7:45 AM", "8:00 AM", "8:30 AM", "9:00 AM", "9:30 AM", 
+  "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM", "1:00 PM", "1:30 PM", 
+  "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM", "4:00 PM", "4:30 PM", "5:00 PM", "5:30 PM", "5:45 PM", 
+  "6:00 PM", "6:30 PM", "7:00 PM", "7:30 PM", "8:00 PM", "8:30 PM", "9:00 PM", "9:30 PM", 
+  "10:00 PM", "10:30 PM", "11:00 PM", "Close"
+];
 
 // ==========================================
 // 2. SUB-COMPONENTS
@@ -44,7 +43,6 @@ function DraggableWorker({ worker, usedLives, isDarkMode }) {
 
   const isOvertime = usedLives >= worker.maxLives;
 
-  // Dark mode color mapping
   const bgNormal = isDarkMode ? '#2c2c2c' : '#f9f9f9';
   const bgOvertime = isDarkMode ? '#4a1c1c' : '#ffe6e6';
   const borderNormal = isDarkMode ? '#444' : '#ddd';
@@ -68,7 +66,6 @@ function DraggableWorker({ worker, usedLives, isDarkMode }) {
       </div>
       <div style={{ fontSize: '0.8em', color: textSub, marginBottom: '8px' }}>{worker.type}</div>
       
-      {/* The Lives Dots */}
       <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
         {[...Array(worker.maxLives)].map((_, index) => (
           <div key={index} style={{ 
@@ -76,7 +73,6 @@ function DraggableWorker({ worker, usedLives, isDarkMode }) {
             backgroundColor: isOvertime ? '#ff4d4d' : (index < usedLives ? (isDarkMode ? '#555' : '#e0e0e0') : '#4caf50') 
           }} />
         ))}
-        {/* Extra Overtime Dots */}
         {usedLives > worker.maxLives && [...Array(usedLives - worker.maxLives)].map((_, index) => (
           <div key={`extra-${index}`} style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#8b0000' }} />
         ))}
@@ -85,12 +81,14 @@ function DraggableWorker({ worker, usedLives, isDarkMode }) {
   );
 }
 
-function ShiftDropZone({ id, title, defaultTime, isDarkMode, children }) {
+function ShiftDropZone({ id, title, defaultTime, isDarkMode, staffCount, children }) {
   const { isOver, setNodeRef } = useDroppable({ id });
   
   const bgIdle = isDarkMode ? '#1e1e1e' : '#fff';
   const bgActive = isDarkMode ? '#1b3a20' : '#e8f5e9';
   const borderColor = isDarkMode ? '#444' : '#ccc';
+  
+  const counterColor = staffCount < 3 ? (isDarkMode ? '#ff8a80' : '#d32f2f') : '#4caf50';
 
   return (
     <div ref={setNodeRef} style={{ 
@@ -98,7 +96,12 @@ function ShiftDropZone({ id, title, defaultTime, isDarkMode, children }) {
       border: `2px dashed ${borderColor}`, backgroundColor: isOver ? bgActive : bgIdle,
       transition: 'background-color 0.2s'
     }}>
-      <h4 style={{ margin: '0 0 5px 0', color: isDarkMode ? '#ccc' : '#555' }}>{title}</h4>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+        <h4 style={{ margin: 0, color: isDarkMode ? '#ccc' : '#555' }}>{title}</h4>
+        <div style={{ fontSize: '0.8em', fontWeight: 'bold', color: counterColor, backgroundColor: isDarkMode ? '#333' : '#eee', padding: '2px 6px', borderRadius: '10px' }}>
+          {staffCount}/3
+        </div>
+      </div>
       <div style={{ fontSize: '0.8em', color: isDarkMode ? '#888' : '#999', marginBottom: '10px' }}>{defaultTime}</div>
       {children}
     </div>
@@ -127,8 +130,16 @@ function ShiftConfirmationModal({ pendingShift, onConfirm, onCancel, isDarkMode 
 
         {isEditing ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '15px' }}>
-            <label>Start <input value={startTime} onChange={e => setStartTime(e.target.value)} style={{ width: '100%', padding: '6px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px' }} /></label>
-            <label>End <input value={endTime} onChange={e => setEndTime(e.target.value)} style={{ width: '100%', padding: '6px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px' }} /></label>
+            <label>Start 
+              <select value={startTime} onChange={e => setStartTime(e.target.value)} style={{ width: '100%', padding: '6px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px', marginTop: '4px' }}>
+                {TIME_OPTIONS.map(time => <option key={`start-${time}`} value={time}>{time}</option>)}
+              </select>
+            </label>
+            <label>End 
+              <select value={endTime} onChange={e => setEndTime(e.target.value)} style={{ width: '100%', padding: '6px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px', marginTop: '4px' }}>
+                {TIME_OPTIONS.map(time => <option key={`end-${time}`} value={time}>{time}</option>)}
+              </select>
+            </label>
             <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
               <button onClick={() => onConfirm(startTime, endTime)} style={{ flex: 1, padding: '8px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Save</button>
               <button onClick={onCancel} style={{ flex: 1, padding: '8px', backgroundColor: isDarkMode ? '#555' : '#e0e0e0', color: textColor, border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
@@ -155,11 +166,9 @@ export default function App() {
   const [activeDragWorker, setActiveDragWorker] = useState(null);
   const [pendingShift, setPendingShift] = useState(null);
   
-  // New Toggles
   const [isManagerView, setIsManagerView] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
-  // Mobile Drag Sensors (Delay prevents scrolling from triggering a drag)
   const mouseSensor = useSensor(MouseSensor);
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 250, tolerance: 5 },
@@ -187,7 +196,6 @@ export default function App() {
     const workerId = active.id;
     const [day, ampm] = over.id.split('-'); 
 
-    // SAFETY CHECK: Prevent double-booking same shift
     const isAlreadyScheduled = schedule[day][ampm].some(shift => shift.workerId === workerId);
     if (isAlreadyScheduled) {
       alert(`${active.data.current.worker.name} is already scheduled for ${day} ${ampm.toUpperCase()}!`);
@@ -230,7 +238,26 @@ export default function App() {
     }));
   };
 
-  // Main Colors
+  const handleToggleManagerView = () => {
+    if (isManagerView) {
+      let understaffedAlerts = [];
+      Object.keys(schedule).forEach(day => {
+        const amCount = schedule[day].am.length;
+        const pmCount = schedule[day].pm.length;
+        if (amCount < 3) understaffedAlerts.push(`• ${day.toUpperCase()} AM (has ${amCount})`);
+        if (pmCount < 3) understaffedAlerts.push(`• ${day.toUpperCase()} PM (has ${pmCount})`);
+      });
+
+      if (understaffedAlerts.length > 0) {
+        const isSure = window.confirm(
+          `WAIT! You have understaffed shifts:\n\n${understaffedAlerts.join('\n')}\n\nAre you sure you want to proceed to Public View?`
+        );
+        if (!isSure) return; 
+      }
+    }
+    setIsManagerView(!isManagerView);
+  };
+
   const mainBg = isDarkMode ? '#121212' : '#ffffff';
   const mainText = isDarkMode ? '#e0e0e0' : '#000000';
   const headerBorder = isDarkMode ? '#333' : '#eee';
@@ -245,7 +272,7 @@ export default function App() {
             <h1 style={{ margin: 0 }}>Shift Scheduler</h1>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button 
-                onClick={() => setIsManagerView(!isManagerView)}
+                onClick={handleToggleManagerView}
                 style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
               >
                 {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
@@ -272,16 +299,7 @@ export default function App() {
             )}
 
             {/* THE CALENDAR */}
-            {/* Horizontal scroll wrapper for mobile to prevent squishing */}
-            {/* Horizontal scroll wrapper for mobile to prevent squishing */}
-<div style={{ 
-  flex: 1, 
-  minWidth: 0, /* <--- THIS IS THE MAGIC FIX */
-  overflowX: 'auto', 
-  paddingBottom: '10px',
-  WebkitOverflowScrolling: 'touch' /* Smooth scrolling on iOS */
-}}>
-
+            <div style={{ flex: 1, minWidth: 0, overflowX: 'auto', paddingBottom: '10px', WebkitOverflowScrolling: 'touch' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '10px', minWidth: '900px' }}>
                 {Object.keys(schedule).map(day => (
                   <div key={day} style={{ border: `1px solid ${isDarkMode ? '#444' : '#ccc'}`, borderRadius: '8px', overflow: 'hidden', backgroundColor: isDarkMode ? '#1a1a1a' : '#fafafa' }}>
@@ -291,7 +309,7 @@ export default function App() {
                     <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                       
                       {/* AM Zone */}
-                      <ShiftDropZone id={`${day}-am`} title="☀️ AM" defaultTime="7:45 - 5:45" isDarkMode={isDarkMode}>
+                      <ShiftDropZone id={`${day}-am`} title="☀️ AM" defaultTime="7:45 - 5:45" isDarkMode={isDarkMode} staffCount={schedule[day].am.length}>
                         {schedule[day].am.map(shift => (
                           <div key={shift.id} style={{ position: 'relative', backgroundColor: isDarkMode ? '#0d47a1' : '#e3f2fd', padding: '8px', borderRadius: '4px', fontSize: '0.85em', marginTop: '5px', border: `1px solid ${isDarkMode ? '#1565c0' : '#bbdefb'}`, color: isDarkMode ? '#fff' : '#000' }}>
                             <strong>{shift.workerName}</strong><br/>{shift.startTime} - {shift.endTime}
@@ -303,7 +321,7 @@ export default function App() {
                       </ShiftDropZone>
 
                       {/* PM Zone */}
-                      <ShiftDropZone id={`${day}-pm`} title="🌙 PM" defaultTime="2:00 - Close" isDarkMode={isDarkMode}>
+                      <ShiftDropZone id={`${day}-pm`} title="🌙 PM" defaultTime="2:00 - Close" isDarkMode={isDarkMode} staffCount={schedule[day].pm.length}>
                         {schedule[day].pm.map(shift => (
                           <div key={shift.id} style={{ position: 'relative', backgroundColor: isDarkMode ? '#e65100' : '#fff3e0', padding: '8px', borderRadius: '4px', fontSize: '0.85em', marginTop: '5px', border: `1px solid ${isDarkMode ? '#ef6c00' : '#ffe0b2'}`, color: isDarkMode ? '#fff' : '#000' }}>
                             <strong>{shift.workerName}</strong><br/>{shift.startTime} - {shift.endTime}
