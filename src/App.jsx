@@ -215,8 +215,11 @@ export default function App() {
   const handleDragStart = (event) => {
     setActiveDragWorker(event.active.data.current.worker);
   };
-//Autosave to localStorage whenever 'schedule' changes
-useEffect (() => localStorage.setItem('dispensary-schedule', JSON.stringify(schedule));}, [schedule]);
+// Autosave to localStorage whenever 'schedule' changes
+  useEffect(() => {
+    localStorage.setItem('dispensary-schedule', JSON.stringify(schedule));
+  }, [schedule]);
+  
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveDragWorker(null);
