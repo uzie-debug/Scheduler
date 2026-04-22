@@ -186,7 +186,7 @@ export default function App() {
 
   // Autosave to localStorage whenever 'schedule' changes
   useEffect(() => {
-    localStorage.setItem('dispensary-schedule', JSON.stringify(schedule));
+    localStorage.setItem('dispensary-schedule', JSON.stringify(schedule))
   }, [schedule]);
 
   const [activeDragWorker, setActiveDragWorker] = useState(null);
