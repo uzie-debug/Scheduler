@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   DndContext, DragOverlay, useDraggable, useDroppable, 
   useSensor, useSensors, MouseSensor, TouchSensor 
@@ -171,7 +171,12 @@ function ShiftConfirmationModal({ pendingShift, onConfirm, onCancel, isDarkMode 
 // 3. THE MAIN APP
 // ==========================================
 export default function App() {
-  const [schedule, setSchedule] = useState(initialSchedule);
+  const [schedule, setSchedule] = useState(initialSchedule); =>
+  //Check local storage for a saved schedule
+  const savedSchedule = localStorage.getItem('dispensary-schedule');
+  if (savedSchedule) {return JSON.parse(savedSchedule);}
+  return initialSchedule;} );
+
   const [activeDragWorker, setActiveDragWorker] = useState(null);
   const [pendingShift, setPendingShift] = useState(null);
   
@@ -196,7 +201,8 @@ export default function App() {
   const handleDragStart = (event) => {
     setActiveDragWorker(event.active.data.current.worker);
   };
-
+//Autosave to localStorage whenever 'schedule' changes
+useEffect (() => localStorage.setItem('dispensary-schedule', JSON.stringify(schedule));}, [schedule]);
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveDragWorker(null);
