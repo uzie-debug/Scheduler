@@ -171,13 +171,26 @@ function ShiftConfirmationModal({ pendingShift, onConfirm, onCancel, isDarkMode 
 // 3. THE MAIN APP
 // ==========================================
 export default function App() {
-  const [schedule, setSchedule] = useState(initialSchedule); =>
-  //Check local storage for a saved schedule
-  const savedSchedule = localStorage.getItem('dispensary-schedule');
-  if (savedSchedule) {return JSON.parse(savedSchedule);}
-  return initialSchedule;} );
+  const [schedule, setSchedule] = useState(() => {
+    // Check local storage for a saved schedule
+    const savedSchedule = localStorage.getItem('dispensary-schedule');
+    
+    if (savedSchedule) {
+      // If we found one, translate it from text back into JavaScript data
+      return JSON.parse(savedSchedule); 
+    }
+    
+    // If nothing was saved, return the empty week
+    return initialSchedule; 
+  });
+
+  // Autosave to localStorage whenever 'schedule' changes
+  useEffect(() => {
+    localStorage.setItem('dispensary-schedule', JSON.stringify(schedule));
+  }, [schedule]);
 
   const [activeDragWorker, setActiveDragWorker] = useState(null);
+
   const [pendingShift, setPendingShift] = useState(null);
   
   const [isManagerView, setIsManagerView] = useState(true);
