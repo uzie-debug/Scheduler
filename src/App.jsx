@@ -184,11 +184,12 @@ export default function App() {
     return initialSchedule; 
   });
 
-  // Autosave to localStorage whenever 'schedule' changes
-  useEffect(() => {
-    localStorage.setItem('dispensary-schedule', JSON.stringify(schedule))
-  }, [schedule]);
 
+// Autosave to localStorage whenever 'schedule' changes
+  useEffect(() => {
+    localStorage.setItem('dispensary-schedule', JSON.stringify(schedule));
+  }, [schedule]);
+  
   const [activeDragWorker, setActiveDragWorker] = useState(null);
 
   const [pendingShift, setPendingShift] = useState(null);
