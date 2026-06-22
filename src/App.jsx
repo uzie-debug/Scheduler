@@ -19,7 +19,7 @@ const initialWorkers = [
   { id: 'w-9', name: 'Ursa', maxLives: 4, type: 'Full-Time' },
   { id: 'w-10', name: 'Jasmin', maxLives: 4, type: 'Full-Time' },
   { id: 'w-11', name: 'Markus', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-12', name: 'TO BE ADDED', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-12', name: 'Jazz', maxLives: 4, type: 'Full-Time' },
 ];
 
 const initialSchedule = {
