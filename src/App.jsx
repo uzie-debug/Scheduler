@@ -14,12 +14,12 @@ const initialWorkers = [
   { id: 'w-4', name: 'Kadie', maxLives: 4, type: 'Full-Time' },
   { id: 'w-5', name: 'Kaylee', maxLives: 4, type: 'Full-Time' },
   { id: 'w-6', name: 'Isaiah', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-7', name: 'Lucas', maxLives: 3, type: 'Part-Time' },
+  { id: 'w-7', name: 'Lucas', maxLives: 4, type: 'Full-Time' },
   { id: 'w-8', name: 'Erica', maxLives: 4, type: 'Full-Time' },
   { id: 'w-9', name: 'Ursa', maxLives: 4, type: 'Full-Time' },
   { id: 'w-10', name: 'Jasmin', maxLives: 4, type: 'Full-Time' },
   { id: 'w-11', name: 'Markus', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-12', name: 'Jazz', maxLives: 4, type: 'Full-Time' },
+  { id: 'w-12', name: 'Jazz', maxLives: 3, type: 'Part-Time' },
 ];
 
 const initialSchedule = {
