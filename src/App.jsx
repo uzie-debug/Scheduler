@@ -3,11 +3,12 @@ import {
   DndContext, DragOverlay, useDraggable, useDroppable, 
   useSensor, useSensors, MouseSensor, TouchSensor 
 } from '@dnd-kit/core';
+import { supabase, workerFromDb, workerToDb, shiftFromDb, shiftToDb } from './supabaseClient';
 
 // ==========================================
-// 1. THE TOYBOX (Initial Data)
+// 1. SEED DATA (used only for first-time migration)
 // ==========================================
-const initialWorkers = [
+const SEED_WORKERS = [
   { id: 'w-1', name: 'Gary', maxLives: 4, type: 'Full-Time' },
   { id: 'w-2', name: 'Jaime', maxLives: 3, type: 'Part-Time' },
   { id: 'w-3', name: 'Angelique', maxLives: 4, type: 'Full-Time' },
@@ -22,7 +23,7 @@ const initialWorkers = [
   { id: 'w-12', name: 'Jazz', maxLives: 3, type: 'Part-Time' },
 ];
 
-const initialSchedule = {
+const EMPTY_SCHEDULE = {
   monday: { am: [], pm: [] },
   tuesday: { am: [], pm: [] },
   wednesday: { am: [], pm: [] },
@@ -39,6 +40,27 @@ const TIME_OPTIONS = [
   "6:00 PM", "6:30 PM", "7:00 PM", "7:30 PM", "8:00 PM", "8:30 PM", "9:00 PM", "9:30 PM", 
   "10:00 PM", "10:30 PM", "11:00 PM", "Close"
 ];
+
+const mkId = () => 'w-' + Math.random().toString(36).slice(2, 9);
+
+// ==========================================
+// Helper: flat shifts array → nested schedule object
+// ==========================================
+function shiftsToSchedule(flatShifts) {
+  const sched = JSON.parse(JSON.stringify(EMPTY_SCHEDULE));
+  for (const s of flatShifts) {
+    if (sched[s.day] && sched[s.day][s.ampm]) {
+      sched[s.day][s.ampm].push({
+        id: s.id,
+        workerId: s.workerId,
+        workerName: s.workerName,
+        startTime: s.startTime,
+        endTime: s.endTime,
+      });
+    }
+  }
+  return sched;
+}
 
 // ==========================================
 // 2. SUB-COMPONENTS
@@ -168,34 +190,101 @@ function ShiftConfirmationModal({ pendingShift, onConfirm, onCancel, isDarkMode 
 }
 
 // ==========================================
-// 3. THE MAIN APP
+// 3. WORKER MANAGEMENT MODAL
+// ==========================================
+function WorkerManagerModal({ workers, onAdd, onRemove, onClose, isDarkMode }) {
+  const [newName, setNewName] = useState('');
+  const [newType, setNewType] = useState('Full-Time');
+  const [newMaxLives, setNewMaxLives] = useState(4);
+
+  const modalBg = isDarkMode ? '#2c2c2c' : 'white';
+  const textColor = isDarkMode ? '#e0e0e0' : 'black';
+  const inputBg = isDarkMode ? '#1e1e1e' : 'white';
+  const inputBorder = isDarkMode ? '#555' : '#ccc';
+  const cardBg = isDarkMode ? '#1e1e1e' : '#f5f5f5';
+
+  const handleAdd = () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    if (workers.some(w => w.name.toLowerCase() === trimmed.toLowerCase())) {
+      alert(`${trimmed} is already on the bench.`);
+      return;
+    }
+    onAdd({ id: mkId(), name: trimmed, maxLives: newMaxLives, type: newType });
+    setNewName('');
+  };
+
+  const handleRemove = (worker) => {
+    if (window.confirm(`Remove ${worker.name} from the bench? This will also remove them from any scheduled shifts.`)) {
+      onRemove(worker.id);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+    }}>
+      <div style={{ backgroundColor: modalBg, color: textColor, padding: '24px', borderRadius: '8px', width: '420px', maxWidth: '95vw', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+        <h3 style={{ marginTop: 0 }}>Manage Workers</h3>
+
+        {/* Add New Worker */}
+        <div style={{ background: cardBg, padding: '12px', borderRadius: '6px', marginBottom: '16px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '0.85em', marginBottom: '10px', color: isDarkMode ? '#aaa' : '#555' }}>ADD NEW WORKER</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <input
+              placeholder="Name"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAdd()}
+              style={{ padding: '8px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px' }}
+            />
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <select value={newType} onChange={e => setNewType(e.target.value)} style={{ flex: 1, padding: '8px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px' }}>
+                <option value="Full-Time">Full-Time</option>
+                <option value="Part-Time">Part-Time</option>
+              </select>
+              <select value={newMaxLives} onChange={e => setNewMaxLives(Number(e.target.value))} style={{ width: '100px', padding: '8px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px' }}>
+                {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n} shifts</option>)}
+              </select>
+            </div>
+            <button onClick={handleAdd} style={{ padding: '8px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>+ Add to Bench</button>
+          </div>
+        </div>
+
+        {/* Current Workers */}
+        <div style={{ fontWeight: 'bold', fontSize: '0.85em', marginBottom: '8px', color: isDarkMode ? '#aaa' : '#555' }}>CURRENT ROSTER ({workers.length})</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
+          {workers.map(w => (
+            <div key={w.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 10px', background: cardBg, borderRadius: '4px' }}>
+              <div>
+                <span style={{ fontWeight: 'bold' }}>{w.name}</span>
+                <span style={{ fontSize: '0.8em', color: isDarkMode ? '#888' : '#999', marginLeft: '8px' }}>{w.type} · {w.maxLives} shifts</span>
+              </div>
+              <button onClick={() => handleRemove(w)} style={{ background: '#d32f2f', color: 'white', border: 'none', padding: '4px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '0.85em' }}>Remove</button>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={onClose} style={{ width: '100%', padding: '10px', backgroundColor: isDarkMode ? '#444' : '#e0e0e0', color: textColor, border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>Done</button>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 4. THE MAIN APP
 // ==========================================
 export default function App() {
-  const [schedule, setSchedule] = useState(() => {
-    // Check local storage for a saved schedule
-    const savedSchedule = localStorage.getItem('dispensary-schedule');
-    
-    if (savedSchedule) {
-      // If we found one, translate it from text back into JavaScript data
-      return JSON.parse(savedSchedule); 
-    }
-    
-    // If nothing was saved, return the empty week
-    return initialSchedule; 
-  });
+  const [workers, setWorkers] = useState([]);
+  const [schedule, setSchedule] = useState(JSON.parse(JSON.stringify(EMPTY_SCHEDULE)));
+  const [loaded, setLoaded] = useState(false);
 
-
-// Autosave to localStorage whenever 'schedule' changes
-  useEffect(() => {
-    localStorage.setItem('dispensary-schedule', JSON.stringify(schedule));
-  }, [schedule]);
-  
   const [activeDragWorker, setActiveDragWorker] = useState(null);
-
   const [pendingShift, setPendingShift] = useState(null);
-  
   const [isManagerView, setIsManagerView] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showWorkerManager, setShowWorkerManager] = useState(false);
 
   const mouseSensor = useSensor(MouseSensor);
   const touchSensor = useSensor(TouchSensor, {
@@ -203,6 +292,109 @@ export default function App() {
   });
   const sensors = useSensors(mouseSensor, touchSensor);
 
+  // ── LOAD FROM SUPABASE (with one-time migration) ──────────
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        // Fetch workers
+        const { data: dbWorkers, error: wErr } = await supabase
+          .from('workers').select('*').order('name');
+        if (wErr) throw wErr;
+
+        // Fetch shifts
+        const { data: dbShifts, error: sErr } = await supabase
+          .from('shifts').select('*');
+        if (sErr) throw sErr;
+
+        if (dbWorkers && dbWorkers.length > 0) {
+          // Supabase has workers — use them
+          setWorkers(dbWorkers.map(workerFromDb));
+        } else {
+          // Seed workers from hardcoded list
+          const { error } = await supabase.from('workers').upsert(SEED_WORKERS.map(workerToDb));
+          if (error) console.error('Worker seed error:', error);
+          setWorkers(SEED_WORKERS);
+          console.log('✅ Seeded workers to Supabase');
+        }
+
+        if (dbShifts && dbShifts.length > 0) {
+          // Supabase has shifts — rebuild schedule
+          setSchedule(shiftsToSchedule(dbShifts.map(shiftFromDb)));
+        } else {
+          // Try migrating from localStorage
+          const saved = localStorage.getItem('dispensary-schedule');
+          if (saved) {
+            try {
+              const oldSchedule = JSON.parse(saved);
+              const flatShifts = [];
+              for (const day of Object.keys(oldSchedule)) {
+                for (const ampm of ['am', 'pm']) {
+                  if (oldSchedule[day]?.[ampm]) {
+                    for (const shift of oldSchedule[day][ampm]) {
+                      flatShifts.push({
+                        id: shift.id,
+                        workerId: shift.workerId,
+                        workerName: shift.workerName,
+                        day,
+                        ampm,
+                        startTime: shift.startTime,
+                        endTime: shift.endTime,
+                      });
+                    }
+                  }
+                }
+              }
+              if (flatShifts.length) {
+                const { error } = await supabase.from('shifts').upsert(flatShifts.map(shiftToDb));
+                if (error) console.error('Shift migration error:', error);
+              }
+              setSchedule(oldSchedule);
+              console.log('✅ Migrated localStorage shifts to Supabase');
+            } catch {}
+          }
+        }
+      } catch (err) {
+        console.error('Supabase load failed, falling back to localStorage:', err);
+        setWorkers(SEED_WORKERS);
+        const saved = localStorage.getItem('dispensary-schedule');
+        if (saved) try { setSchedule(JSON.parse(saved)); } catch {}
+      }
+      setLoaded(true);
+    };
+    loadData();
+  }, []);
+
+  // ── WORKER MANAGEMENT ─────────────────────────────────────
+  const addWorker = (worker) => {
+    setWorkers(prev => [...prev, worker]);
+    supabase.from('workers').upsert(workerToDb(worker)).then(({ error }) => {
+      if (error) console.error('Add worker failed:', error);
+    });
+  };
+
+  const removeWorker = (workerId) => {
+    setWorkers(prev => prev.filter(w => w.id !== workerId));
+    // Remove their shifts from schedule
+    setSchedule(prev => {
+      const next = { ...prev };
+      for (const day of Object.keys(next)) {
+        next[day] = {
+          am: next[day].am.filter(s => s.workerId !== workerId),
+          pm: next[day].pm.filter(s => s.workerId !== workerId),
+        };
+      }
+      return next;
+    });
+    // Remove from Supabase
+    supabase.from('workers').delete().eq('id', workerId).then(({ error }) => {
+      if (error) console.error('Remove worker failed:', error);
+    });
+    supabase.from('shifts').delete().eq('worker_id', workerId).then(({ error }) => {
+      if (error) console.error('Remove worker shifts failed:', error);
+    });
+  };
+
+  // ── SHIFT OPERATIONS ──────────────────────────────────────
   const getUsedLives = (workerId) => {
     let count = 0;
     Object.values(schedule).forEach(day => {
@@ -215,11 +407,7 @@ export default function App() {
   const handleDragStart = (event) => {
     setActiveDragWorker(event.active.data.current.worker);
   };
-// Autosave to localStorage whenever 'schedule' changes
-  useEffect(() => {
-    localStorage.setItem('dispensary-schedule', JSON.stringify(schedule));
-  }, [schedule]);
-  
+
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveDragWorker(null);
@@ -257,6 +445,12 @@ export default function App() {
         [ampm]: [...prev[day][ampm], newShift]
       }
     }));
+
+    // Persist to Supabase
+    supabase.from('shifts').upsert(shiftToDb({ ...newShift, day, ampm })).then(({ error }) => {
+      if (error) console.error('Save shift failed:', error);
+    });
+
     setPendingShift(null); 
   };
 
@@ -268,6 +462,19 @@ export default function App() {
         [ampm]: prev[day][ampm].filter(shift => shift.id !== shiftIdToRemove)
       }
     }));
+
+    // Remove from Supabase
+    supabase.from('shifts').delete().eq('id', shiftIdToRemove).then(({ error }) => {
+      if (error) console.error('Remove shift failed:', error);
+    });
+  };
+
+  const clearWeek = () => {
+    if (!window.confirm('Clear all shifts for the week? This cannot be undone.')) return;
+    setSchedule(JSON.parse(JSON.stringify(EMPTY_SCHEDULE)));
+    supabase.from('shifts').delete().neq('id', '').then(({ error }) => {
+      if (error) console.error('Clear week failed:', error);
+    });
   };
 
   const handleToggleManagerView = () => {
@@ -294,6 +501,17 @@ export default function App() {
   const mainText = isDarkMode ? '#e0e0e0' : '#000000';
   const headerBorder = isDarkMode ? '#333' : '#eee';
 
+  if (!loaded) {
+    return (
+      <div style={{ backgroundColor: mainBg, color: mainText, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '1.2em', marginBottom: '8px' }}>Loading schedule...</div>
+          <div style={{ fontSize: '0.85em', color: isDarkMode ? '#888' : '#999' }}>Connecting to database</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ backgroundColor: mainBg, color: mainText, minHeight: '100vh', transition: 'all 0.3s' }}>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -302,7 +520,23 @@ export default function App() {
           {/* Header & Controls */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${headerBorder}`, paddingBottom: '10px', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
             <h1 style={{ margin: 0 }}>Shift Scheduler</h1>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              {isManagerView && (
+                <>
+                  <button 
+                    onClick={() => setShowWorkerManager(true)}
+                    style={{ padding: '8px 16px', backgroundColor: '#2196f3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    👥 Manage Workers
+                  </button>
+                  <button 
+                    onClick={clearWeek}
+                    style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#555' : '#e0e0e0', color: isDarkMode ? 'white' : 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+                  >
+                    🗑️ Clear Week
+                  </button>
+                </>
+              )}
               <button 
                 onClick={handleToggleManagerView}
                 style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
@@ -324,7 +558,7 @@ export default function App() {
             {isManagerView && (
               <div style={{ width: '250px', flexShrink: 0, border: `2px dashed ${isDarkMode ? '#444' : '#ccc'}`, padding: '15px', borderRadius: '8px', backgroundColor: isDarkMode ? '#1a1a1a' : '#fdfdfd' }}>
                 <h2 style={{ marginTop: 0 }}>The Bench</h2>
-                {initialWorkers.map(worker => (
+                {workers.map(worker => (
                   <DraggableWorker key={worker.id} worker={worker} usedLives={getUsedLives(worker.id)} isDarkMode={isDarkMode} />
                 ))}
               </div>
@@ -373,7 +607,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* THE MODAL */}
+        {/* THE SHIFT MODAL */}
         {pendingShift && (
           <ShiftConfirmationModal pendingShift={pendingShift} onConfirm={confirmShiftAssignment} onCancel={() => setPendingShift(null)} isDarkMode={isDarkMode} />
         )}
@@ -388,6 +622,17 @@ export default function App() {
         </DragOverlay>
 
       </DndContext>
+
+      {/* WORKER MANAGEMENT MODAL */}
+      {showWorkerManager && (
+        <WorkerManagerModal
+          workers={workers}
+          onAdd={addWorker}
+          onRemove={removeWorker}
+          onClose={() => setShowWorkerManager(false)}
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   );
 }
