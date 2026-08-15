@@ -273,7 +273,74 @@ function WorkerManagerModal({ workers, onAdd, onRemove, onClose, isDarkMode }) {
 }
 
 // ==========================================
-// 4. THE MAIN APP
+// 4. LOGIN MODAL
+// ==========================================
+function LoginModal({ onSuccess, onCancel, isDarkMode }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const modalBg = isDarkMode ? '#2c2c2c' : 'white';
+  const textColor = isDarkMode ? '#e0e0e0' : 'black';
+  const inputBg = isDarkMode ? '#1e1e1e' : 'white';
+  const inputBorder = isDarkMode ? '#555' : '#ccc';
+
+  const handleLogin = async () => {
+    setLoading(true);
+    setError('');
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) {
+      setError(authError.message);
+      setLoading(false);
+    } else {
+      onSuccess();
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+    }}>
+      <div style={{ backgroundColor: modalBg, color: textColor, padding: '24px', borderRadius: '8px', width: '340px', maxWidth: '95vw', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
+        <h3 style={{ marginTop: 0 }}>Manager Login</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <input
+            type="email" placeholder="Email" value={email}
+            onChange={e => setEmail(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            style={{ padding: '10px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px', fontSize: '14px' }}
+          />
+          <input
+            type="password" placeholder="Password" value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()}
+            style={{ padding: '10px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px', fontSize: '14px' }}
+          />
+          {error && (
+            <div style={{ color: '#f44336', fontSize: '0.85em', padding: '6px 8px', background: isDarkMode ? '#3a1f1f' : '#fdecea', borderRadius: '4px' }}>{error}</div>
+          )}
+          <button
+            onClick={handleLogin} disabled={loading}
+            style={{ padding: '10px', backgroundColor: '#2196f3', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'wait' : 'pointer', fontWeight: 'bold', opacity: loading ? 0.7 : 1 }}
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
+          <button
+            onClick={onCancel}
+            style={{ padding: '8px', border: 'none', color: isDarkMode ? '#aaa' : 'gray', backgroundColor: 'transparent', cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 5. THE MAIN APP
 // ==========================================
 export default function App() {
   const [workers, setWorkers] = useState([]);
@@ -282,15 +349,38 @@ export default function App() {
 
   const [activeDragWorker, setActiveDragWorker] = useState(null);
   const [pendingShift, setPendingShift] = useState(null);
-  const [isManagerView, setIsManagerView] = useState(true);
+  const [isManagerView, setIsManagerView] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showWorkerManager, setShowWorkerManager] = useState(false);
+  const [session, setSession] = useState(null);
+  const [showLogin, setShowLogin] = useState(false);
 
   const mouseSensor = useSensor(MouseSensor);
   const touchSensor = useSensor(TouchSensor, {
     activationConstraint: { delay: 250, tolerance: 5 },
   });
   const sensors = useSensors(mouseSensor, touchSensor);
+
+  // ── AUTH SESSION ───────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      if (s) setIsManagerView(true);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      if (s) setIsManagerView(true);
+      else setIsManagerView(false);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setSession(null);
+    setIsManagerView(false);
+    setShowWorkerManager(false);
+  };
 
   // ── LOAD FROM SUPABASE (with one-time migration) ──────────
   useEffect(() => {
@@ -411,7 +501,7 @@ export default function App() {
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveDragWorker(null);
-    if (!over) return;
+    if (!over || !session) return;
 
     const workerId = active.id;
     const [day, ampm] = over.id.split('-'); 
@@ -478,6 +568,11 @@ export default function App() {
   };
 
   const handleToggleManagerView = () => {
+    if (!isManagerView && !session) {
+      // Not authenticated — open login instead of toggling
+      setShowLogin(true);
+      return;
+    }
     if (isManagerView) {
       let understaffedAlerts = [];
       Object.keys(schedule).forEach(day => {
@@ -520,8 +615,8 @@ export default function App() {
           {/* Header & Controls */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${headerBorder}`, paddingBottom: '10px', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
             <h1 style={{ margin: 0 }}>Shift Scheduler</h1>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              {isManagerView && (
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              {isManagerView && session && (
                 <>
                   <button 
                     onClick={() => setShowWorkerManager(true)}
@@ -537,12 +632,29 @@ export default function App() {
                   </button>
                 </>
               )}
-              <button 
-                onClick={handleToggleManagerView}
-                style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-              >
-                {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
-              </button>
+              {session ? (
+                <>
+                  <button 
+                    onClick={handleToggleManagerView}
+                    style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                  >
+                    {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
+                  </button>
+                  <button 
+                    onClick={handleSignOut}
+                    style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#333' : '#e0e0e0', color: isDarkMode ? '#ff8a80' : '#d32f2f', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
+                  >
+                    Sign Out
+                  </button>
+                </>
+              ) : (
+                <button 
+                  onClick={() => setShowLogin(true)}
+                  style={{ padding: '8px 16px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  🔓 Manager Login
+                </button>
+              )}
               <button 
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#444' : '#e0e0e0', color: isDarkMode ? 'white' : 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
@@ -624,12 +736,21 @@ export default function App() {
       </DndContext>
 
       {/* WORKER MANAGEMENT MODAL */}
-      {showWorkerManager && (
+      {showWorkerManager && session && (
         <WorkerManagerModal
           workers={workers}
           onAdd={addWorker}
           onRemove={removeWorker}
           onClose={() => setShowWorkerManager(false)}
+          isDarkMode={isDarkMode}
+        />
+      )}
+
+      {/* LOGIN MODAL */}
+      {showLogin && (
+        <LoginModal
+          onSuccess={() => setShowLogin(false)}
+          onCancel={() => setShowLogin(false)}
           isDarkMode={isDarkMode}
         />
       )}
