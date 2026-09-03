@@ -4,24 +4,9 @@ import {
   useSensor, useSensors, MouseSensor, TouchSensor 
 } from '@dnd-kit/core';
 import { supabase, workerFromDb, workerToDb, shiftFromDb, shiftToDb } from './supabaseClient';
-
-// ==========================================
-// 1. SEED DATA (used only for first-time migration)
-// ==========================================
-const SEED_WORKERS = [
-  { id: 'w-1', name: 'Gary', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-2', name: 'Jaime', maxLives: 3, type: 'Part-Time' },
-  { id: 'w-3', name: 'Angelique', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-4', name: 'Kadie', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-5', name: 'Kaylee', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-6', name: 'Isaiah', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-7', name: 'Lucas', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-8', name: 'Erica', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-9', name: 'Ursa', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-10', name: 'Jasmin', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-11', name: 'Markus', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-12', name: 'Jazz', maxLives: 3, type: 'Part-Time' },
-];
+import { useAuth } from './AuthContext';
+import { describeDbError } from './dbError';
+import Login from './Login';
 
 const EMPTY_SCHEDULE = {
   monday: { am: [], pm: [] },
@@ -273,87 +258,41 @@ function WorkerManagerModal({ workers, onAdd, onRemove, onClose, isDarkMode }) {
 }
 
 // ==========================================
-// 4. LOGIN MODAL
-// ==========================================
-function LoginModal({ onSuccess, onCancel, isDarkMode }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const modalBg = isDarkMode ? '#2c2c2c' : 'white';
-  const textColor = isDarkMode ? '#e0e0e0' : 'black';
-  const inputBg = isDarkMode ? '#1e1e1e' : 'white';
-  const inputBorder = isDarkMode ? '#555' : '#ccc';
-
-  const handleLogin = async () => {
-    setLoading(true);
-    setError('');
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-    } else {
-      onSuccess();
-    }
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-      backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
-    }}>
-      <div style={{ backgroundColor: modalBg, color: textColor, padding: '24px', borderRadius: '8px', width: '340px', maxWidth: '95vw', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
-        <h3 style={{ marginTop: 0 }}>Manager Login</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <input
-            type="email" placeholder="Email" value={email}
-            onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{ padding: '10px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px', fontSize: '14px' }}
-          />
-          <input
-            type="password" placeholder="Password" value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{ padding: '10px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px', fontSize: '14px' }}
-          />
-          {error && (
-            <div style={{ color: '#f44336', fontSize: '0.85em', padding: '6px 8px', background: isDarkMode ? '#3a1f1f' : '#fdecea', borderRadius: '4px' }}>{error}</div>
-          )}
-          <button
-            onClick={handleLogin} disabled={loading}
-            style={{ padding: '10px', backgroundColor: '#2196f3', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'wait' : 'pointer', fontWeight: 'bold', opacity: loading ? 0.7 : 1 }}
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-          <button
-            onClick={onCancel}
-            style={{ padding: '8px', border: 'none', color: isDarkMode ? '#aaa' : 'gray', backgroundColor: 'transparent', cursor: 'pointer' }}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
 // 5. THE MAIN APP
 // ==========================================
 export default function App() {
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui,sans-serif', color: '#777' }}>
+        Loading…
+      </div>
+    );
+  }
+
+  // Anon reads are gone. Without a session the schedule is empty, so the old
+  // "public view" is not a view of anything.
+  if (!session) return <Login />;
+
+  return <Scheduler />;
+}
+
+function Scheduler() {
+  const { user, isSchedulerEditor, signOut } = useAuth();
   const [workers, setWorkers] = useState([]);
   const [schedule, setSchedule] = useState(JSON.parse(JSON.stringify(EMPTY_SCHEDULE)));
   const [loaded, setLoaded] = useState(false);
 
   const [activeDragWorker, setActiveDragWorker] = useState(null);
   const [pendingShift, setPendingShift] = useState(null);
-  const [isManagerView, setIsManagerView] = useState(false);
+  // Editors land in manager view; viewers can never leave the read-only one.
+  const [isManagerView, setIsManagerView] = useState(isSchedulerEditor);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [showWorkerManager, setShowWorkerManager] = useState(false);
-  const [session, setSession] = useState(null);
-  const [showLogin, setShowLogin] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const [saveError, setSaveError] = useState(null);
+  const reportWrite = (error) => setSaveError(describeDbError(error));
 
   const mouseSensor = useSensor(MouseSensor);
   const touchSensor = useSensor(TouchSensor, {
@@ -361,104 +300,43 @@ export default function App() {
   });
   const sensors = useSensors(mouseSensor, touchSensor);
 
-  // ── AUTH SESSION ───────────────────────────────────────────
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      if (s) setIsManagerView(true);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s) setIsManagerView(true);
-      else setIsManagerView(false);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
+  // Session and roles live in AuthContext now; this component only reads them.
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setIsManagerView(false);
     setShowWorkerManager(false);
+    await signOut();
   };
 
-  // ── LOAD FROM SUPABASE (with one-time migration) ──────────
+  // ── LOAD FROM SUPABASE ────────────────────────────────────
+  //
+  // Supabase is the only source of truth. The seed-on-empty and
+  // localStorage-fallback branches are gone on purpose: with RLS on, a read
+  // the caller is not allowed to make returns [] rather than an error, and
+  // the old code read that as "database is empty, push the seed roster" --
+  // which would have overwritten the real roster.
   useEffect(() => {
     const loadData = async () => {
-      try {
-        // Fetch workers
-        const { data: dbWorkers, error: wErr } = await supabase
-          .from('workers').select('*').order('name');
-        if (wErr) throw wErr;
-
-        // Fetch shifts
-        const { data: dbShifts, error: sErr } = await supabase
-          .from('shifts').select('*');
-        if (sErr) throw sErr;
-
-        if (dbWorkers && dbWorkers.length > 0) {
-          // Supabase has workers — use them
-          setWorkers(dbWorkers.map(workerFromDb));
-        } else {
-          // Seed workers from hardcoded list
-          const { error } = await supabase.from('workers').upsert(SEED_WORKERS.map(workerToDb));
-          if (error) console.error('Worker seed error:', error);
-          setWorkers(SEED_WORKERS);
-          console.log('✅ Seeded workers to Supabase');
-        }
-
-        if (dbShifts && dbShifts.length > 0) {
-          // Supabase has shifts — rebuild schedule
-          setSchedule(shiftsToSchedule(dbShifts.map(shiftFromDb)));
-        } else {
-          // Try migrating from localStorage
-          const saved = localStorage.getItem('dispensary-schedule');
-          if (saved) {
-            try {
-              const oldSchedule = JSON.parse(saved);
-              const flatShifts = [];
-              for (const day of Object.keys(oldSchedule)) {
-                for (const ampm of ['am', 'pm']) {
-                  if (oldSchedule[day]?.[ampm]) {
-                    for (const shift of oldSchedule[day][ampm]) {
-                      flatShifts.push({
-                        id: shift.id,
-                        workerId: shift.workerId,
-                        workerName: shift.workerName,
-                        day,
-                        ampm,
-                        startTime: shift.startTime,
-                        endTime: shift.endTime,
-                      });
-                    }
-                  }
-                }
-              }
-              if (flatShifts.length) {
-                const { error } = await supabase.from('shifts').upsert(flatShifts.map(shiftToDb));
-                if (error) console.error('Shift migration error:', error);
-              }
-              setSchedule(oldSchedule);
-              console.log('✅ Migrated localStorage shifts to Supabase');
-            } catch {}
-          }
-        }
-      } catch (err) {
-        console.error('Supabase load failed, falling back to localStorage:', err);
-        setWorkers(SEED_WORKERS);
-        const saved = localStorage.getItem('dispensary-schedule');
-        if (saved) try { setSchedule(JSON.parse(saved)); } catch {}
+      const [w, sh] = await Promise.all([
+        supabase.from('workers').select('*').order('name'),
+        supabase.from('shifts').select('*'),
+      ]);
+      if (w.error || sh.error) {
+        console.error('Supabase load failed:', w.error || sh.error);
+        setLoadError('Could not load the schedule. Check your connection and reload.');
+      } else {
+        setWorkers((w.data ?? []).map(workerFromDb));
+        setSchedule(shiftsToSchedule((sh.data ?? []).map(shiftFromDb)));
       }
       setLoaded(true);
     };
     loadData();
   }, []);
 
+
   // ── WORKER MANAGEMENT ─────────────────────────────────────
   const addWorker = (worker) => {
     setWorkers(prev => [...prev, worker]);
     supabase.from('workers').upsert(workerToDb(worker)).then(({ error }) => {
-      if (error) console.error('Add worker failed:', error);
+      if (error) { console.error('Add worker failed:', error); reportWrite(error); }
     });
   };
 
@@ -477,10 +355,10 @@ export default function App() {
     });
     // Remove from Supabase
     supabase.from('workers').delete().eq('id', workerId).then(({ error }) => {
-      if (error) console.error('Remove worker failed:', error);
+      if (error) { console.error('Remove worker failed:', error); reportWrite(error); }
     });
     supabase.from('shifts').delete().eq('worker_id', workerId).then(({ error }) => {
-      if (error) console.error('Remove worker shifts failed:', error);
+      if (error) { console.error('Remove worker shifts failed:', error); reportWrite(error); }
     });
   };
 
@@ -501,7 +379,7 @@ export default function App() {
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveDragWorker(null);
-    if (!over || !session) return;
+    if (!over || !isSchedulerEditor) return;
 
     const workerId = active.id;
     const [day, ampm] = over.id.split('-'); 
@@ -538,7 +416,7 @@ export default function App() {
 
     // Persist to Supabase
     supabase.from('shifts').upsert(shiftToDb({ ...newShift, day, ampm })).then(({ error }) => {
-      if (error) console.error('Save shift failed:', error);
+      if (error) { console.error('Save shift failed:', error); reportWrite(error); }
     });
 
     setPendingShift(null); 
@@ -555,7 +433,7 @@ export default function App() {
 
     // Remove from Supabase
     supabase.from('shifts').delete().eq('id', shiftIdToRemove).then(({ error }) => {
-      if (error) console.error('Remove shift failed:', error);
+      if (error) { console.error('Remove shift failed:', error); reportWrite(error); }
     });
   };
 
@@ -563,16 +441,13 @@ export default function App() {
     if (!window.confirm('Clear all shifts for the week? This cannot be undone.')) return;
     setSchedule(JSON.parse(JSON.stringify(EMPTY_SCHEDULE)));
     supabase.from('shifts').delete().neq('id', '').then(({ error }) => {
-      if (error) console.error('Clear week failed:', error);
+      if (error) { console.error('Clear week failed:', error); reportWrite(error); }
     });
   };
 
   const handleToggleManagerView = () => {
-    if (!isManagerView && !session) {
-      // Not authenticated — open login instead of toggling
-      setShowLogin(true);
-      return;
-    }
+    // Viewers have no manager view to toggle into.
+    if (!isSchedulerEditor) return;
     if (isManagerView) {
       let understaffedAlerts = [];
       Object.keys(schedule).forEach(day => {
@@ -609,6 +484,16 @@ export default function App() {
 
   return (
     <div style={{ backgroundColor: mainBg, color: mainText, minHeight: '100vh', transition: 'all 0.3s' }}>
+      {/* The UI gate is cosmetic; the RLS policy is the real one, and this is
+          where its answer shows up. */}
+      {(loadError || saveError) && (
+        <div style={{ background: '#fdecea', color: '#a4342b', padding: '10px 18px', fontSize: 13, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+          <span>{loadError || saveError}</span>
+          {saveError && !loadError && (
+            <button onClick={() => setSaveError(null)} style={{ background: 'none', border: 'none', color: '#a4342b', cursor: 'pointer', fontSize: 15 }}>×</button>
+          )}
+        </div>
+      )}
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div style={{ fontFamily: 'sans-serif', padding: '20px', width: '100%', boxSizing: 'border-box' }}>
           
@@ -616,7 +501,7 @@ export default function App() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${headerBorder}`, paddingBottom: '10px', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
             <h1 style={{ margin: 0 }}>Shift Scheduler</h1>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-              {isManagerView && session && (
+              {isManagerView && isSchedulerEditor && (
                 <>
                   <button 
                     onClick={() => setShowWorkerManager(true)}
@@ -632,29 +517,23 @@ export default function App() {
                   </button>
                 </>
               )}
-              {session ? (
-                <>
-                  <button 
-                    onClick={handleToggleManagerView}
-                    style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
-                  </button>
-                  <button 
-                    onClick={handleSignOut}
-                    style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#333' : '#e0e0e0', color: isDarkMode ? '#ff8a80' : '#d32f2f', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
-                  >
-                    Sign Out
-                  </button>
-                </>
-              ) : (
-                <button 
-                  onClick={() => setShowLogin(true)}
-                  style={{ padding: '8px 16px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+              {isSchedulerEditor && (
+                <button
+                  onClick={handleToggleManagerView}
+                  style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                 >
-                  🔓 Manager Login
+                  {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
                 </button>
               )}
+              <span style={{ fontSize: 12, color: isDarkMode ? '#999' : '#777' }}>
+                {user?.email}{!isSchedulerEditor && ' · read only'}
+              </span>
+              <button
+                onClick={handleSignOut}
+                style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#333' : '#e0e0e0', color: isDarkMode ? '#ff8a80' : '#d32f2f', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
+              >
+                Sign Out
+              </button>
               <button 
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#444' : '#e0e0e0', color: isDarkMode ? 'white' : 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
@@ -736,7 +615,7 @@ export default function App() {
       </DndContext>
 
       {/* WORKER MANAGEMENT MODAL */}
-      {showWorkerManager && session && (
+      {showWorkerManager && isSchedulerEditor && (
         <WorkerManagerModal
           workers={workers}
           onAdd={addWorker}
@@ -746,14 +625,6 @@ export default function App() {
         />
       )}
 
-      {/* LOGIN MODAL */}
-      {showLogin && (
-        <LoginModal
-          onSuccess={() => setShowLogin(false)}
-          onCancel={() => setShowLogin(false)}
-          isDarkMode={isDarkMode}
-        />
-      )}
     </div>
   );
 }
