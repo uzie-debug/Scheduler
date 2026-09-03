@@ -517,25 +517,23 @@ function Scheduler() {
                   </button>
                 </>
               )}
-              <>
-                  {isSchedulerEditor && (
-                  <button 
-                    onClick={handleToggleManagerView}
-                    style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
-                  </button>
-                  )}
-                  <span style={{ fontSize: 12, color: isDarkMode ? '#999' : '#777' }}>
-                    {user?.email}{!isSchedulerEditor && ' · read only'}
-                  </span>
-                  <button
-                    onClick={handleSignOut}
-                    style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#333' : '#e0e0e0', color: isDarkMode ? '#ff8a80' : '#d32f2f', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
-                  >
-                    Sign Out
-                  </button>
-              </>
+              {isSchedulerEditor && (
+                <button
+                  onClick={handleToggleManagerView}
+                  style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
+                </button>
+              )}
+              <span style={{ fontSize: 12, color: isDarkMode ? '#999' : '#777' }}>
+                {user?.email}{!isSchedulerEditor && ' · read only'}
+              </span>
+              <button
+                onClick={handleSignOut}
+                style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#333' : '#e0e0e0', color: isDarkMode ? '#ff8a80' : '#d32f2f', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
+              >
+                Sign Out
+              </button>
               <button 
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#444' : '#e0e0e0', color: isDarkMode ? 'white' : 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
