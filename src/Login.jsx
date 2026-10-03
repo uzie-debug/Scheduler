@@ -4,6 +4,9 @@ import { C, TAP } from './theme';
 
 const field = {
   width: '100%',
+  // Without border-box, 100% width plus padding pushes the input past the
+  // card's edge, and minHeight stacks the padding on top of the 44px.
+  boxSizing: 'border-box',
   minHeight: TAP,
   background: '#14142a',
   border: `1px solid ${C.border}`,
@@ -39,6 +42,7 @@ export default function Login() {
 
   return (
     <div style={{
+      boxSizing: 'border-box', // else the 20px padding makes it 100vh + 40px and scrolls
       minHeight: '100vh', background: C.bg, color: C.text,
       fontFamily: 'system-ui,sans-serif',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
