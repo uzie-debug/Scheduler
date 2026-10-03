@@ -4,25 +4,12 @@ import {
   useSensor, useSensors, MouseSensor, TouchSensor 
 } from '@dnd-kit/core';
 import { supabase, workerFromDb, workerToDb, shiftFromDb, shiftToDb } from './supabaseClient';
+import { useAuth } from './AuthContext';
+import Login from './Login';
 
 // ==========================================
-// 1. SEED DATA (used only for first-time migration)
+// 1. CONSTANTS
 // ==========================================
-const SEED_WORKERS = [
-  { id: 'w-1', name: 'Gary', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-2', name: 'Jaime', maxLives: 3, type: 'Part-Time' },
-  { id: 'w-3', name: 'Angelique', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-4', name: 'Kadie', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-5', name: 'Kaylee', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-6', name: 'Isaiah', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-7', name: 'Lucas', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-8', name: 'Erica', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-9', name: 'Ursa', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-10', name: 'Jasmin', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-11', name: 'Markus', maxLives: 4, type: 'Full-Time' },
-  { id: 'w-12', name: 'Jazz', maxLives: 3, type: 'Part-Time' },
-];
-
 const EMPTY_SCHEDULE = {
   monday: { am: [], pm: [] },
   tuesday: { am: [], pm: [] },
@@ -273,87 +260,60 @@ function WorkerManagerModal({ workers, onAdd, onRemove, onClose, isDarkMode }) {
 }
 
 // ==========================================
-// 4. LOGIN MODAL
+// 4. THE MAIN APP
 // ==========================================
-function LoginModal({ onSuccess, onCancel, isDarkMode }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const modalBg = isDarkMode ? '#2c2c2c' : 'white';
-  const textColor = isDarkMode ? '#e0e0e0' : 'black';
-  const inputBg = isDarkMode ? '#1e1e1e' : 'white';
-  const inputBorder = isDarkMode ? '#555' : '#ccc';
-
-  const handleLogin = async () => {
-    setLoading(true);
-    setError('');
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-    } else {
-      onSuccess();
-    }
-  };
-
-  return (
-    <div style={{
-      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-      backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
-    }}>
-      <div style={{ backgroundColor: modalBg, color: textColor, padding: '24px', borderRadius: '8px', width: '340px', maxWidth: '95vw', boxShadow: '0 10px 25px rgba(0,0,0,0.5)' }}>
-        <h3 style={{ marginTop: 0 }}>Manager Login</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <input
-            type="email" placeholder="Email" value={email}
-            onChange={e => setEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{ padding: '10px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px', fontSize: '14px' }}
-          />
-          <input
-            type="password" placeholder="Password" value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleLogin()}
-            style={{ padding: '10px', backgroundColor: inputBg, color: textColor, border: `1px solid ${inputBorder}`, borderRadius: '4px', fontSize: '14px' }}
-          />
-          {error && (
-            <div style={{ color: '#f44336', fontSize: '0.85em', padding: '6px 8px', background: isDarkMode ? '#3a1f1f' : '#fdecea', borderRadius: '4px' }}>{error}</div>
-          )}
-          <button
-            onClick={handleLogin} disabled={loading}
-            style={{ padding: '10px', backgroundColor: '#2196f3', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'wait' : 'pointer', fontWeight: 'bold', opacity: loading ? 0.7 : 1 }}
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-          <button
-            onClick={onCancel}
-            style={{ padding: '8px', border: 'none', color: isDarkMode ? '#aaa' : 'gray', backgroundColor: 'transparent', cursor: 'pointer' }}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+// Turns a Supabase error into something a person at the counter can act on.
+// 42501 = insufficient_privilege: RLS said no.
+function describeDbError(error) {
+  if (!error) return null;
+  const raw = `${error.code ?? ''} ${error.message ?? ''}`;
+  if (raw.includes('42501')) return 'This login can view the schedule but not change it.';
+  return error.message || 'Something went wrong. Try again.';
 }
 
-// ==========================================
-// 5. THE MAIN APP
-// ==========================================
 export default function App() {
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#888' }}>
+        Loading…
+      </div>
+    );
+  }
+
+  // workers and shifts are readable by signed-in users only, so there is
+  // nothing to show without a session.
+  if (!session) return <Login />;
+
+  return <SchedulerApp />;
+}
+
+function SchedulerApp() {
+  const { user, isSchedulerEditor, signOut } = useAuth();
+
   const [workers, setWorkers] = useState([]);
   const [schedule, setSchedule] = useState(JSON.parse(JSON.stringify(EMPTY_SCHEDULE)));
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const [saveError, setSaveError] = useState(null);
+  const reportWrite = (error) => setSaveError(describeDbError(error));
 
   const [activeDragWorker, setActiveDragWorker] = useState(null);
   const [pendingShift, setPendingShift] = useState(null);
-  const [isManagerView, setIsManagerView] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  // Editors land in the admin view; everyone else only ever sees the public one.
+  const [isManagerView, setIsManagerView] = useState(isSchedulerEditor);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    try { return localStorage.getItem('scheduler-dark') === '1'; } catch { return false; }
+  });
   const [showWorkerManager, setShowWorkerManager] = useState(false);
-  const [session, setSession] = useState(null);
-  const [showLogin, setShowLogin] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem('scheduler-dark', isDarkMode ? '1' : '0'); } catch { /* private mode */ }
+  }, [isDarkMode]);
+
+  const canEdit = isSchedulerEditor && isManagerView;
 
   const mouseSensor = useSensor(MouseSensor);
   const touchSensor = useSensor(TouchSensor, {
@@ -361,93 +321,24 @@ export default function App() {
   });
   const sensors = useSensors(mouseSensor, touchSensor);
 
-  // ── AUTH SESSION ───────────────────────────────────────────
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      if (s) setIsManagerView(true);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s) setIsManagerView(true);
-      else setIsManagerView(false);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    setSession(null);
-    setIsManagerView(false);
-    setShowWorkerManager(false);
-  };
-
-  // ── LOAD FROM SUPABASE (with one-time migration) ──────────
+  // ── LOAD FROM SUPABASE ────────────────────────────────────
+  // This component only mounts once there is a session, so the reads run
+  // authenticated. The old seed-on-empty and localStorage branches are gone
+  // on purpose: under RLS an unauthorised read returns [] rather than an
+  // error, and that code read [] as "empty database" and tried to reseed it.
   useEffect(() => {
     const loadData = async () => {
-      try {
-        // Fetch workers
-        const { data: dbWorkers, error: wErr } = await supabase
-          .from('workers').select('*').order('name');
-        if (wErr) throw wErr;
-
-        // Fetch shifts
-        const { data: dbShifts, error: sErr } = await supabase
-          .from('shifts').select('*');
-        if (sErr) throw sErr;
-
-        if (dbWorkers && dbWorkers.length > 0) {
-          // Supabase has workers — use them
-          setWorkers(dbWorkers.map(workerFromDb));
-        } else {
-          // Seed workers from hardcoded list
-          const { error } = await supabase.from('workers').upsert(SEED_WORKERS.map(workerToDb));
-          if (error) console.error('Worker seed error:', error);
-          setWorkers(SEED_WORKERS);
-          console.log('✅ Seeded workers to Supabase');
-        }
-
-        if (dbShifts && dbShifts.length > 0) {
-          // Supabase has shifts — rebuild schedule
-          setSchedule(shiftsToSchedule(dbShifts.map(shiftFromDb)));
-        } else {
-          // Try migrating from localStorage
-          const saved = localStorage.getItem('dispensary-schedule');
-          if (saved) {
-            try {
-              const oldSchedule = JSON.parse(saved);
-              const flatShifts = [];
-              for (const day of Object.keys(oldSchedule)) {
-                for (const ampm of ['am', 'pm']) {
-                  if (oldSchedule[day]?.[ampm]) {
-                    for (const shift of oldSchedule[day][ampm]) {
-                      flatShifts.push({
-                        id: shift.id,
-                        workerId: shift.workerId,
-                        workerName: shift.workerName,
-                        day,
-                        ampm,
-                        startTime: shift.startTime,
-                        endTime: shift.endTime,
-                      });
-                    }
-                  }
-                }
-              }
-              if (flatShifts.length) {
-                const { error } = await supabase.from('shifts').upsert(flatShifts.map(shiftToDb));
-                if (error) console.error('Shift migration error:', error);
-              }
-              setSchedule(oldSchedule);
-              console.log('✅ Migrated localStorage shifts to Supabase');
-            } catch {}
-          }
-        }
-      } catch (err) {
-        console.error('Supabase load failed, falling back to localStorage:', err);
-        setWorkers(SEED_WORKERS);
-        const saved = localStorage.getItem('dispensary-schedule');
-        if (saved) try { setSchedule(JSON.parse(saved)); } catch {}
+      const [w, s] = await Promise.all([
+        supabase.from('workers').select('*').order('name'),
+        supabase.from('shifts').select('*'),
+      ]);
+      const err = w.error || s.error;
+      if (err) {
+        console.error('Supabase load failed:', err);
+        setLoadError('Could not load the schedule. Check your connection and reload.');
+      } else {
+        setWorkers((w.data ?? []).map(workerFromDb));
+        setSchedule(shiftsToSchedule((s.data ?? []).map(shiftFromDb)));
       }
       setLoaded(true);
     };
@@ -455,33 +346,39 @@ export default function App() {
   }, []);
 
   // ── WORKER MANAGEMENT ─────────────────────────────────────
-  const addWorker = (worker) => {
+  const addWorker = async (worker) => {
     setWorkers(prev => [...prev, worker]);
-    supabase.from('workers').upsert(workerToDb(worker)).then(({ error }) => {
-      if (error) console.error('Add worker failed:', error);
-    });
+    const { error } = await supabase.from('workers').insert(workerToDb(worker));
+    if (error) {
+      setWorkers(prev => prev.filter(w => w.id !== worker.id));
+      reportWrite(error);
+    }
   };
 
-  const removeWorker = (workerId) => {
+  const removeWorker = async (workerId) => {
+    const prevWorkers = workers;
+    const prevSchedule = schedule;
     setWorkers(prev => prev.filter(w => w.id !== workerId));
-    // Remove their shifts from schedule
     setSchedule(prev => {
-      const next = { ...prev };
-      for (const day of Object.keys(next)) {
+      const next = {};
+      for (const day of Object.keys(prev)) {
         next[day] = {
-          am: next[day].am.filter(s => s.workerId !== workerId),
-          pm: next[day].pm.filter(s => s.workerId !== workerId),
+          am: prev[day].am.filter(s => s.workerId !== workerId),
+          pm: prev[day].pm.filter(s => s.workerId !== workerId),
         };
       }
       return next;
     });
-    // Remove from Supabase
-    supabase.from('workers').delete().eq('id', workerId).then(({ error }) => {
-      if (error) console.error('Remove worker failed:', error);
-    });
-    supabase.from('shifts').delete().eq('worker_id', workerId).then(({ error }) => {
-      if (error) console.error('Remove worker shifts failed:', error);
-    });
+    // Shifts first, then the worker: if shifts reference workers, deleting
+    // the worker first would fail (or orphan rows) depending on the FK.
+    const s = await supabase.from('shifts').delete().eq('worker_id', workerId);
+    const w = s.error ? s : await supabase.from('workers').delete().eq('id', workerId).select('id');
+    // A delete RLS blocks returns no error and zero rows.
+    if (s.error || w.error || !w.data?.length) {
+      setWorkers(prevWorkers);
+      setSchedule(prevSchedule);
+      reportWrite(s.error || w.error || { code: '42501' });
+    }
   };
 
   // ── SHIFT OPERATIONS ──────────────────────────────────────
@@ -501,15 +398,15 @@ export default function App() {
   const handleDragEnd = (event) => {
     const { active, over } = event;
     setActiveDragWorker(null);
-    if (!over || !session) return;
+    if (!over || !canEdit) return;
 
     const workerId = active.id;
-    const [day, ampm] = over.id.split('-'); 
+    const [day, ampm] = over.id.split('-');
 
     const isAlreadyScheduled = schedule[day][ampm].some(shift => shift.workerId === workerId);
     if (isAlreadyScheduled) {
       alert(`${active.data.current.worker.name} is already scheduled for ${day} ${ampm.toUpperCase()}!`);
-      return; 
+      return;
     }
 
     setPendingShift({
@@ -518,61 +415,64 @@ export default function App() {
     });
   };
 
-  const confirmShiftAssignment = (startTime, endTime) => {
-    const [day, ampm] = pendingShift.zoneId.split('-'); 
+  const confirmShiftAssignment = async (startTime, endTime) => {
+    const [day, ampm] = pendingShift.zoneId.split('-');
     const newShift = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).slice(2, 11),
       workerId: pendingShift.worker.id,
       workerName: pendingShift.worker.name,
       startTime,
       endTime
     };
+    setPendingShift(null);
 
     setSchedule(prev => ({
       ...prev,
-      [day]: {
-        ...prev[day],
-        [ampm]: [...prev[day][ampm], newShift]
-      }
+      [day]: { ...prev[day], [ampm]: [...prev[day][ampm], newShift] }
     }));
 
-    // Persist to Supabase
-    supabase.from('shifts').upsert(shiftToDb({ ...newShift, day, ampm })).then(({ error }) => {
-      if (error) console.error('Save shift failed:', error);
-    });
-
-    setPendingShift(null); 
+    const { error } = await supabase.from('shifts').insert(shiftToDb({ ...newShift, day, ampm }));
+    if (error) {
+      setSchedule(prev => ({
+        ...prev,
+        [day]: { ...prev[day], [ampm]: prev[day][ampm].filter(s => s.id !== newShift.id) }
+      }));
+      reportWrite(error);
+    }
   };
 
-  const removeShift = (day, ampm, shiftIdToRemove) => {
+  const removeShift = async (day, ampm, shiftIdToRemove) => {
+    const removed = schedule[day][ampm].find(s => s.id === shiftIdToRemove);
     setSchedule(prev => ({
       ...prev,
-      [day]: {
-        ...prev[day],
-        [ampm]: prev[day][ampm].filter(shift => shift.id !== shiftIdToRemove)
-      }
+      [day]: { ...prev[day], [ampm]: prev[day][ampm].filter(shift => shift.id !== shiftIdToRemove) }
     }));
 
-    // Remove from Supabase
-    supabase.from('shifts').delete().eq('id', shiftIdToRemove).then(({ error }) => {
-      if (error) console.error('Remove shift failed:', error);
-    });
+    const { data, error } = await supabase.from('shifts').delete().eq('id', shiftIdToRemove).select('id');
+    if (error || !data?.length) {
+      if (removed) {
+        setSchedule(prev => ({
+          ...prev,
+          [day]: { ...prev[day], [ampm]: [...prev[day][ampm], removed] }
+        }));
+      }
+      reportWrite(error ?? { code: '42501' });
+    }
   };
 
-  const clearWeek = () => {
+  const clearWeek = async () => {
     if (!window.confirm('Clear all shifts for the week? This cannot be undone.')) return;
+    const prev = schedule;
     setSchedule(JSON.parse(JSON.stringify(EMPTY_SCHEDULE)));
-    supabase.from('shifts').delete().neq('id', '').then(({ error }) => {
-      if (error) console.error('Clear week failed:', error);
-    });
+    const { error } = await supabase.from('shifts').delete().neq('id', '');
+    if (error) {
+      setSchedule(prev);
+      reportWrite(error);
+    }
   };
 
   const handleToggleManagerView = () => {
-    if (!isManagerView && !session) {
-      // Not authenticated — open login instead of toggling
-      setShowLogin(true);
-      return;
-    }
+    if (!isSchedulerEditor) return;
     if (isManagerView) {
       let understaffedAlerts = [];
       Object.keys(schedule).forEach(day => {
@@ -586,7 +486,7 @@ export default function App() {
         const isSure = window.confirm(
           `WAIT! You have understaffed shifts:\n\n${understaffedAlerts.join('\n')}\n\nAre you sure you want to proceed to Public View?`
         );
-        if (!isSure) return; 
+        if (!isSure) return;
       }
     }
     setIsManagerView(!isManagerView);
@@ -607,24 +507,36 @@ export default function App() {
     );
   }
 
+  const banner = (text, onClose) => (
+    <div style={{ background: isDarkMode ? '#3a1f1f' : '#fdecea', color: isDarkMode ? '#e79090' : '#b71c1c', padding: '10px 14px', borderRadius: 4, fontSize: 14, marginBottom: 14, display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+      <span>{text}</span>
+      {onClose && <button onClick={onClose} aria-label="Dismiss" style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontSize: 16 }}>×</button>}
+    </div>
+  );
+
   return (
     <div style={{ backgroundColor: mainBg, color: mainText, minHeight: '100vh', transition: 'all 0.3s' }}>
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
         <div style={{ fontFamily: 'sans-serif', padding: '20px', width: '100%', boxSizing: 'border-box' }}>
-          
+
           {/* Header & Controls */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: `2px solid ${headerBorder}`, paddingBottom: '10px', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
-            <h1 style={{ margin: 0 }}>Shift Scheduler</h1>
+            <div>
+              <h1 style={{ margin: 0 }}>Shift Scheduler</h1>
+              <div style={{ fontSize: 12, color: isDarkMode ? '#888' : '#777', marginTop: 2 }}>
+                {user?.email} · {isSchedulerEditor ? 'editor' : 'view only'}
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-              {isManagerView && session && (
+              {canEdit && (
                 <>
-                  <button 
+                  <button
                     onClick={() => setShowWorkerManager(true)}
                     style={{ padding: '8px 16px', backgroundColor: '#2196f3', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                   >
                     👥 Manage Workers
                   </button>
-                  <button 
+                  <button
                     onClick={clearWeek}
                     style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#555' : '#e0e0e0', color: isDarkMode ? 'white' : 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                   >
@@ -632,44 +544,41 @@ export default function App() {
                   </button>
                 </>
               )}
-              {session ? (
-                <>
-                  <button 
-                    onClick={handleToggleManagerView}
-                    style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
-                  >
-                    {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
-                  </button>
-                  <button 
-                    onClick={handleSignOut}
-                    style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#333' : '#e0e0e0', color: isDarkMode ? '#ff8a80' : '#d32f2f', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
-                  >
-                    Sign Out
-                  </button>
-                </>
-              ) : (
-                <button 
-                  onClick={() => setShowLogin(true)}
-                  style={{ padding: '8px 16px', backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+              {isSchedulerEditor && (
+                <button
+                  onClick={handleToggleManagerView}
+                  style={{ padding: '8px 16px', backgroundColor: isManagerView ? '#f44336' : '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                 >
-                  🔓 Manager Login
+                  {isManagerView ? "🔒 Public View" : "🔓 Admin View"}
                 </button>
               )}
-              <button 
+              <button
                 onClick={() => setIsDarkMode(!isDarkMode)}
                 style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#444' : '#e0e0e0', color: isDarkMode ? 'white' : 'black', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
               >
                 {isDarkMode ? "☀️ Light Mode" : "🌙 Dark Mode"}
               </button>
+              <button
+                onClick={signOut}
+                style={{ padding: '8px 16px', backgroundColor: isDarkMode ? '#333' : '#e0e0e0', color: isDarkMode ? '#ff8a80' : '#d32f2f', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '13px' }}
+              >
+                Sign Out
+              </button>
             </div>
           </div>
-          
+
+          {loadError && banner(loadError)}
+          {saveError && banner(saveError, () => setSaveError(null))}
+
           <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
-            
+
             {/* THE BENCH */}
-            {isManagerView && (
+            {canEdit && (
               <div style={{ width: '250px', flexShrink: 0, border: `2px dashed ${isDarkMode ? '#444' : '#ccc'}`, padding: '15px', borderRadius: '8px', backgroundColor: isDarkMode ? '#1a1a1a' : '#fdfdfd' }}>
                 <h2 style={{ marginTop: 0 }}>The Bench</h2>
+                {workers.length === 0 && (
+                  <p style={{ fontSize: '0.85em', color: isDarkMode ? '#888' : '#999' }}>No workers yet. Add them with Manage Workers.</p>
+                )}
                 {workers.map(worker => (
                   <DraggableWorker key={worker.id} worker={worker} usedLives={getUsedLives(worker.id)} isDarkMode={isDarkMode} />
                 ))}
@@ -685,14 +594,14 @@ export default function App() {
                       {day}
                     </div>
                     <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                      
+
                       {/* AM Zone */}
                       <ShiftDropZone id={`${day}-am`} title="☀️ AM" defaultTime="7:45 - 5:45" isDarkMode={isDarkMode} staffCount={schedule[day].am.length}>
                         {schedule[day].am.map(shift => (
                           <div key={shift.id} style={{ position: 'relative', backgroundColor: isDarkMode ? '#0d47a1' : '#e3f2fd', padding: '8px', borderRadius: '4px', fontSize: '0.85em', marginTop: '5px', border: `1px solid ${isDarkMode ? '#1565c0' : '#bbdefb'}`, color: isDarkMode ? '#fff' : '#000' }}>
                             <strong>{shift.workerName}</strong><br/>{shift.startTime} - {shift.endTime}
-                            {isManagerView && (
-                              <button onClick={() => removeShift(day, 'am', shift.id)} style={{ position: 'absolute', top: '2px', right: '4px', background: 'transparent', border: 'none', color: isDarkMode ? '#ff8a80' : '#d32f2f', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2em' }}>×</button>
+                            {canEdit && (
+                              <button onClick={() => removeShift(day, 'am', shift.id)} aria-label={`Remove ${shift.workerName}`} style={{ position: 'absolute', top: '2px', right: '4px', background: 'transparent', border: 'none', color: isDarkMode ? '#ff8a80' : '#d32f2f', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2em' }}>×</button>
                             )}
                           </div>
                         ))}
@@ -703,8 +612,8 @@ export default function App() {
                         {schedule[day].pm.map(shift => (
                           <div key={shift.id} style={{ position: 'relative', backgroundColor: isDarkMode ? '#e65100' : '#fff3e0', padding: '8px', borderRadius: '4px', fontSize: '0.85em', marginTop: '5px', border: `1px solid ${isDarkMode ? '#ef6c00' : '#ffe0b2'}`, color: isDarkMode ? '#fff' : '#000' }}>
                             <strong>{shift.workerName}</strong><br/>{shift.startTime} - {shift.endTime}
-                            {isManagerView && (
-                              <button onClick={() => removeShift(day, 'pm', shift.id)} style={{ position: 'absolute', top: '2px', right: '4px', background: 'transparent', border: 'none', color: isDarkMode ? '#ff8a80' : '#d32f2f', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2em' }}>×</button>
+                            {canEdit && (
+                              <button onClick={() => removeShift(day, 'pm', shift.id)} aria-label={`Remove ${shift.workerName}`} style={{ position: 'absolute', top: '2px', right: '4px', background: 'transparent', border: 'none', color: isDarkMode ? '#ff8a80' : '#d32f2f', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2em' }}>×</button>
                             )}
                           </div>
                         ))}
@@ -736,21 +645,12 @@ export default function App() {
       </DndContext>
 
       {/* WORKER MANAGEMENT MODAL */}
-      {showWorkerManager && session && (
+      {showWorkerManager && canEdit && (
         <WorkerManagerModal
           workers={workers}
           onAdd={addWorker}
           onRemove={removeWorker}
           onClose={() => setShowWorkerManager(false)}
-          isDarkMode={isDarkMode}
-        />
-      )}
-
-      {/* LOGIN MODAL */}
-      {showLogin && (
-        <LoginModal
-          onSuccess={() => setShowLogin(false)}
-          onCancel={() => setShowLogin(false)}
           isDarkMode={isDarkMode}
         />
       )}
